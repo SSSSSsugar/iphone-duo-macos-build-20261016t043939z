@@ -1,0 +1,71 @@
+name: macOS app packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/macos-package']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: mac-arm64
+            architecture: arm64
+          - os: macos-15-intel
+            label: mac-x64
+            architecture: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.9.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          python scripts/setup_worker.py
+      - name: Test checkout and local settings without real orders
+        run: python scripts/test_worker.py
+      - name: Build and check bundled Python worker
+        run: |
+          python scripts/build_worker.py
+          python scripts/smoke_worker.py
+      - name: Check frontend and desktop engine
+        run: |
+          pnpm build
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Build macOS application
+        run: pnpm bundle
+      - name: Verify application and create distributable archives
+        run: bash scripts/package_macos.sh '${{ matrix.label }}' '${{ matrix.architecture }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DUO-Killer-${{ matrix.label }}
+          path: artifacts/macos/${{ matrix.label }}/
+          if-no-files-found: error
+          retention-days: 14
+
