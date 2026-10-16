@@ -23,7 +23,7 @@ main_binary="$app/Contents/MacOS/$executable"
 worker_binary="$app/Contents/Resources/worker/duo-killer-worker"
 for binary in "$main_binary" "$worker_binary"; do
   [[ -x "$binary" ]] || { echo "Executable missing: $binary" >&2; exit 1; }
-  lipo -verify_arch "$expected_arch" "$binary"
+  lipo "$binary" -verify_arch "$expected_arch"
 done
 # Run the worker from the final app, not just the intermediate build folder.
 python3 scripts/smoke_worker.py "$worker_binary"
